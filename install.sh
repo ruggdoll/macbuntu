@@ -18,6 +18,7 @@ KBASE=${KVER%%-*}                        # 7.0.0-38-generic -> 7.0.0
 NEED_INITRAMFS=0
 NEED_REBOOT=0
 CHANGED=0
+APT_UPDATED=0
 
 SECTIONS=(paquets clavier wifi t1 touchbar touchbar-boutons webcam audio bluetooth energie)
 
@@ -35,6 +36,8 @@ put() {
   sudo install -D -m "$mode" "$src" "$dst"; fait "$dst"; CHANGED=1
 }
 # putc DEST [MODE] : comme put, contenu lu sur l'entrée standard.
+# Appeler avec une redirection (< <(cmd), <<<), jamais « cmd | putc » : un pipe le
+# lance dans un sous-shell et CHANGED serait perdu.
 putc() {
   local tmp; tmp=$(mktemp); cat >"$tmp"; put "$tmp" "$1" "${2:-644}"; rm -f "$tmp"
 }
@@ -49,6 +52,7 @@ apt_install() {
   local missing=() p
   for p in "$@"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing+=("$p"); done
   if ((${#missing[@]})); then
+    if ((!APT_UPDATED)); then sudo apt-get update -qq; APT_UPDATED=1; fi
     fait "paquets : ${missing[*]}"
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}" >/dev/null
   fi
@@ -78,8 +82,10 @@ gset() { # gset SCHEMA CLE VALEUR
 # --------------------------------------------------------------- sections ---
 s_paquets() {
   titre "Paquets de base"
-  apt_install git build-essential dkms "linux-headers-$KVER" pkg-config curl
-  ok "outils de compilation et en-têtes du noyau $KVER"
+  # Outils appelés par ce script et par t1-revive (pas tous présents sur un Ubuntu neuf, ex. curl)
+  apt_install git build-essential make patch dkms "linux-headers-$KVER" pkg-config \
+              curl usbutils bluez file cpio bzip2 xz-utils python3 openssl
+  ok "outils de base, de compilation et en-têtes du noyau $KVER"
   if [[ ! -e $REPO/vendor/t1bridge/Cargo.toml ]]; then
     git -C "$REPO" submodule update --init --recursive; fait "sous-modules récupérés"
   fi
@@ -104,9 +110,9 @@ s_wifi() {
   [[ -n $ifc && -e /sys/class/net/$ifc ]] || { info "pas d'interface Wi-Fi, section ignorée"; return; }
   mac=$(cat "/sys/class/net/$ifc/address")
   CHANGED=0
-  sed -e "s/^macaddr=.*/macaddr=$mac/" -e "s/^ccode=.*/ccode=FR/" \
-      "$REPO/vendor/t1-revive/contrib/stick/brcmfmac43602-pcie.txt" \
-    | putc /lib/firmware/brcm/brcmfmac43602-pcie.txt
+  putc /lib/firmware/brcm/brcmfmac43602-pcie.txt < <(
+    sed -e "s/^macaddr=.*/macaddr=$mac/" -e "s/^ccode=.*/ccode=FR/" \
+        "$REPO/vendor/t1-revive/contrib/stick/brcmfmac43602-pcie.txt")
   if ((CHANGED)); then
     sudo modprobe -r brcmfmac_wcc brcmfmac 2>/dev/null || true; sudo modprobe brcmfmac
     fait "pilote brcmfmac rechargé"
@@ -141,7 +147,7 @@ s_t1() {
 
 s_touchbar() {
   titre "Touch Bar et webcam : t1bridge"
-  apt_install rustc cargo libarchive-dev liblzma-dev libsystemd-dev iio-sensor-proxy
+  apt_install rustc cargo libarchive-dev liblzma-dev libsystemd-dev libcurl4-openssl-dev libssl-dev iio-sensor-proxy
   workcopy t1bridge
   local S=$WORK/t1bridge P=$WORK/t1bridge/packaging/arch/t1bridge-dkms
   (cd "$S" && cargo build -q --locked --release -p t1-touchbar-hw --bin t1-touchbar-hw --features service \
@@ -184,13 +190,18 @@ s_touchbar() {
   put "$P/t1bridge.modules-load.conf"           /usr/lib/modules-load.d/t1bridge.conf
   put "$P/t1bridge.modprobe.conf"               /usr/lib/modprobe.d/t1bridge.conf
   # usbmuxd (iPhone) prend la T1 pour un iPhone et la déconfigure à chaque démarrage : on l'exclut.
-  { echo "# Copie de /usr/lib/udev/rules.d/39-usbmuxd.rules sans 5ac/8600 :"
+  putc /etc/udev/rules.d/39-usbmuxd.rules < <(
+    echo "# Copie de /usr/lib/udev/rules.d/39-usbmuxd.rules sans 5ac/8600 :"
     echo "# la T1 (iBridge) n'est pas un iPhone ; usbmuxd la deconfigurait et cassait Touch Bar/webcam."
-    sed 's#|5ac/8600/\*##' /usr/lib/udev/rules.d/39-usbmuxd.rules; } | putc /etc/udev/rules.d/39-usbmuxd.rules
-  local units_changed=$CHANGED
-  if ! grep -qx t1_cfgsel /etc/initramfs-tools/modules; then
-    echo t1_cfgsel | sudo tee -a /etc/initramfs-tools/modules >/dev/null; fait "t1_cfgsel dans l'initramfs"; units_changed=1
+    sed 's#|5ac/8600/\*##' /usr/lib/udev/rules.d/39-usbmuxd.rules)
+  # t1_cfgsel doit être chargé avant que la T1 apparaisse : dans l'initramfs.
+  # Ubuntu 26.04 utilise dracut ; les versions plus anciennes, initramfs-tools.
+  if [[ $(readlink -f "$(command -v update-initramfs)") == *dracut* ]] || dpkg-query -W -f='${Status}' dracut 2>/dev/null | grep -q "ok installed"; then
+    putc /etc/dracut.conf.d/t1bridge.conf <<<'add_drivers+=" t1_cfgsel "'
+  elif ! grep -qx t1_cfgsel /etc/initramfs-tools/modules 2>/dev/null; then
+    echo t1_cfgsel | sudo tee -a /etc/initramfs-tools/modules >/dev/null; fait "t1_cfgsel dans /etc/initramfs-tools/modules"; CHANGED=1
   fi
+  local units_changed=$CHANGED
   if ((units_changed)); then
     NEED_INITRAMFS=1
     sudo systemd-sysusers; sudo systemd-tmpfiles --create /usr/lib/tmpfiles.d/t1bridge.conf

@@ -7,6 +7,7 @@ Testé le 9 octobre 2026 sur Ubuntu 26.04.1 LTS, noyau `7.0.0-38-generic`
 (i7-7920HQ, 16 Go, SSD 512 Go, Intel HD 630 + Radeon Pro 555).
 
 ```bash
+sudo apt install git      # seul prérequis : le script installe lui-même tout le reste
 git clone --recurse-submodules https://github.com/ruggdoll/macbuntu
 cd macbuntu
 ./install.sh              # tout, dans l'ordre (relançable à volonté)
@@ -94,7 +95,9 @@ place après toute réinstallation.
 t1bridge n'a de paquets que pour Arch. Le script compile les deux programmes de la Touch Bar
 (Rust), installe les 4 modules noyau en DKMS (`t1_cfgsel`, `appletbdrm`, `apple_t1_ncm`,
 `uvcvideo` patché), les services systemd, la règle udev, et ajoute l'utilisateur au groupe
-`t1bridge`, faute de quoi la Touch Bar reste noire. `t1_cfgsel` est chargé dans l'initramfs.
+`t1bridge`, faute de quoi la Touch Bar reste noire. `t1_cfgsel` doit être chargé avant que la T1
+apparaisse : il est ajouté à l'initramfs (`/etc/dracut.conf.d/t1bridge.conf` sur Ubuntu 26.04, qui
+utilise dracut ; `/etc/initramfs-tools/modules` sur les versions plus anciennes).
 Touch ID (libfprint/fprintd modifiés, PAM) n'est pas installé.
 
 Deux pièges propres à Ubuntu :
