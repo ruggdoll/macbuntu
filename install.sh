@@ -83,7 +83,7 @@ s_paquets() {
   if [[ ! -e $REPO/vendor/t1bridge/Cargo.toml ]]; then
     git -C "$REPO" submodule update --init --recursive; fait "sous-modules récupérés"
   fi
-  ok "sous-modules : $(git -C "$REPO" submodule status | awk '{printf "%s@%s ", $2, substr($1,1,7)}' | tr -d '+-')"
+  ok "sous-modules : $(git -C "$REPO" submodule status | awk '{sub(/^[-+U]/, "", $1); printf "%s@%s ", $2, substr($1,1,7)}')"
 }
 
 s_clavier() {
@@ -295,7 +295,7 @@ s_energie() {
 [[ $EUID -ne 0 ]] || stop "Lancer sans sudo (le script le demande quand il faut)."
 if [[ ${1:-} == --list ]]; then printf '%s\n' "${SECTIONS[@]}"; exit 0; fi
 [[ $(cat /sys/class/dmi/id/product_name) == MacBookPro14,3 ]] || stop "Prévu pour un MacBookPro14,3 uniquement."
-sudo -v
+sudo true                                # demande le mot de passe une fois si besoin
 
 todo=("$@"); ((${#todo[@]})) || todo=("${SECTIONS[@]}")
 for s in "${todo[@]}"; do
