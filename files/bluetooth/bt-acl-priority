@@ -1,0 +1,23 @@
+#!/bin/bash
+# Puce Bluetooth Broadcom BCM20703A2 (MacBookPro14,3) : sans la commande vendeur
+# "Set ACL Priority" (OGF 0x3f, OCF 0x57), l'audio A2DP (casque) est hache.
+# macOS et Android l'envoient ; Linux non. On l'envoie a chaque nouvelle liaison
+# ACL classique (pas LE). Ref : https://github.com/bluez/bluez/issues/1976
+declare -A done_handles
+while true; do
+  current=$(hcitool con 2>/dev/null | awk '$2 == "ACL" { print $5 }')
+  declare -A seen=()
+  for h in $current; do
+    seen[$h]=1
+    if [[ -z ${done_handles[$h]} ]]; then
+      lo=$(printf '0x%02X' $((h & 0xFF))); hi=$(printf '0x%02X' $(((h >> 8) & 0x0F)))
+      if hcitool cmd 0x3f 0x57 "$lo" "$hi" 0x01 >/dev/null 2>&1; then
+        echo "priorite ACL activee pour la liaison $h"
+        done_handles[$h]=1
+      fi
+    fi
+  done
+  for h in "${!done_handles[@]}"; do [[ -n ${seen[$h]} ]] || unset "done_handles[$h]"; done
+  unset seen
+  sleep 2
+done

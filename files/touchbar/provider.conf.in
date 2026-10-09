@@ -1,0 +1,2 @@
+[Service]
+Environment=T1BRIDGE_DESKTOP_PROVIDER=@HOME@/.local/bin/t1bridge-desktop

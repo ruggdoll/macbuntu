@@ -1,0 +1,43 @@
+#!/bin/sh
+# Fournisseur de bureau pour t1bridge (contrat "Desktop provider v1", docs/interfaces.md) :
+# volume via PipeWire (wpctl) et commandes multimedia via MPRIS (playerctl).
+# Active par T1BRIDGE_DESKTOP_PROVIDER dans ~/.config/systemd/user/t1-touchbar.service.d/provider.conf
+[ "$1" = v1 ] || exit 2
+export LC_ALL=C          # awk doit lire "0.30" avec un point, pas la virgule francaise
+SINK=@DEFAULT_AUDIO_SINK@
+
+# skip PROPRIETE COMMANDE DECALAGE : piste precedente/suivante si le lecteur en a une
+# (playlist, Spotify...), sinon recule/avance de 10 s (ex. video YouTube seule).
+skip() {
+  player=$(/usr/bin/playerctl -l 2>/dev/null | head -n 1)
+  [ -n "$player" ] || exit 1
+  can=$(/usr/bin/busctl --user get-property "org.mpris.MediaPlayer2.$player" \
+        /org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player "$1" 2>/dev/null)
+  if [ "$can" = "b true" ]; then
+    exec /usr/bin/playerctl -p "$player" "$2"
+  else
+    exec /usr/bin/playerctl -p "$player" position "$3"
+  fi
+}
+
+case "$2" in
+  status)
+    vol=$(/usr/bin/wpctl get-volume "$SINK" 2>/dev/null) || exit 1
+    caps=1                                              # 1 = audio
+    /usr/bin/playerctl -l >/dev/null 2>&1 && caps=3     # + 2 = lecteur multimedia present
+    echo "$vol" | awk -v caps="$caps" '{
+      v = int($2 * 100 + 0.5); if (v > 100) v = 100
+      printf "T1BRIDGE-DESKTOP 1 %d %d %d\n", caps, v, ($3 == "[MUTED]")
+    }'
+    ;;
+  set-volume)
+    case "$3" in ''|*[!0-9]*) exit 2;; esac
+    [ "$3" -le 100 ] || exit 2
+    exec /usr/bin/wpctl set-volume "$SINK" "$3%"
+    ;;
+  toggle-mute)      exec /usr/bin/wpctl set-mute "$SINK" toggle ;;
+  media-play-pause) exec /usr/bin/playerctl play-pause ;;
+  media-previous)   skip CanGoPrevious previous 10- ;;
+  media-next)       skip CanGoNext next 10+ ;;
+  *) exit 2 ;;
+esac

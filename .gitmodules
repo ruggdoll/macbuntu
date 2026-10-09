@@ -1,0 +1,9 @@
+[submodule "vendor/t1-revive"]
+	path = vendor/t1-revive
+	url = https://github.com/niconistal/t1-revive
+[submodule "vendor/t1bridge"]
+	path = vendor/t1bridge
+	url = https://github.com/standardagents/t1bridge
+[submodule "vendor/snd_hda_macbookpro"]
+	path = vendor/snd_hda_macbookpro
+	url = https://github.com/davidjo/snd_hda_macbookpro

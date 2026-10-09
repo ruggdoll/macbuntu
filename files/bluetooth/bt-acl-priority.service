@@ -1,0 +1,11 @@
+[Unit]
+Description=Priorite audio Bluetooth (Broadcom Set ACL Priority) pour casques A2DP
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/local/sbin/bt-acl-priority
+Restart=on-failure
+
+[Install]
+WantedBy=bluetooth.target
