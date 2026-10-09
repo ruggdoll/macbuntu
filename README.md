@@ -30,6 +30,7 @@ quand il en a besoin. À la fin, il indique s'il faut un arrêt complet.
 | Haut-parleurs (Cirrus CS8409 + MAX98706) | muets | pilote davidjo en DKMS | `audio` |
 | Casque Bluetooth | son haché | commande Broadcom « Set ACL Priority » | `bluetooth` |
 | Veille | casse la T1 | veille désactivée, écran fermé = verrouillage | `energie` |
+| Carillon au démarrage | joue à chaque allumage | NVRAM Apple `StartupMute=01` | `carillon` |
 | Touch ID | non installé | possible avec t1bridge, non fait | — |
 
 ## Contenu du dépôt
@@ -162,6 +163,14 @@ Windows Boot Camp, qui ne fournit pas non plus de firmware pour cette puce.
 La T1 ne survit pas à la mise en veille. La veille automatique est coupée (secteur et batterie), et
 fermer l'écran verrouille la session (`/etc/systemd/logind.conf.d/10-pas-de-veille-t1.conf`).
 Éteindre le Mac pour le transporter.
+
+### `carillon` : pas de son au démarrage
+
+Le « boing » est joué par le firmware du Mac : son contenu n'est pas modifiable, mais on peut le
+couper avec la variable NVRAM Apple `StartupMute` = `01` (équivalent de `sudo nvram StartupMute=%01`
+sous macOS), écrite via `/sys/firmware/efi/efivars/StartupMute-7c436110-ab2a-4bbb-a880-fe41995c9f82`.
+Pour le réactiver : `sudo chattr -i` puis `sudo rm` sur ce fichier.
+La pomme grise affichée à l'allumage vient elle aussi du firmware et n'est pas modifiable.
 
 ---
 

@@ -20,7 +20,7 @@ NEED_REBOOT=0
 CHANGED=0
 APT_UPDATED=0
 
-SECTIONS=(paquets clavier wifi t1 touchbar touchbar-boutons webcam audio bluetooth energie)
+SECTIONS=(paquets clavier wifi t1 touchbar touchbar-boutons webcam audio bluetooth energie carillon)
 
 # ---------------------------------------------------------------- outils ----
 titre() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
@@ -300,6 +300,17 @@ s_energie() {
     info "pas de session graphique : réglages GNOME ignorés (relancer depuis le bureau)"
   fi
   ok "fermer l'écran verrouille au lieu de mettre en veille"
+}
+
+s_carillon() {
+  titre "Carillon de démarrage coupé (NVRAM Apple StartupMute=01)"
+  # Équivalent de « sudo nvram StartupMute=%01 » sous macOS. Pour le réactiver : supprimer la variable.
+  local v=/sys/firmware/efi/efivars/StartupMute-7c436110-ab2a-4bbb-a880-fe41995c9f82
+  if [[ $(od -An -tx1 "$v" 2>/dev/null | awk '{print $NF}') != 01 ]]; then
+    [[ -e $v ]] && sudo chattr -i "$v"
+    printf '\x07\x00\x00\x00\x01' | sudo tee "$v" >/dev/null; fait "StartupMute=01"
+  fi
+  ok "pas de son au démarrage"
 }
 
 # ------------------------------------------------------------- programme ---
